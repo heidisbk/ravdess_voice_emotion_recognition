@@ -1,21 +1,22 @@
 version: '3.8'
 
 networks:
-  serving_prod_net:
+  shared_net:
     external: true
+
+volumes:
+  data_shared:
 
 services:
   webapp:
     container_name: webapp
-
     build:
       context: .
       dockerfile: Dockerfile
-
+    volumes:
+      - data_shared:/data
     ports:
       - "8081:8081"
-
     networks:
-      - serving_prod_net
-
+      - shared_net
     restart: always

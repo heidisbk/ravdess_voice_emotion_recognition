@@ -16,16 +16,20 @@ def health_check():
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
-        # Vérification du type de fichier
+        # Log des métadonnées pour déboguer
+        print(f"Nom du fichier : {file.filename}")
+        print(f"Type de contenu : {file.content_type}")
+        
+        # Lecture des données du fichier
+        data = await file.read()
+        print(f"Taille du fichier reçu : {len(data)} octets")
+        
         if file.content_type not in ["audio/wav", "audio/mpeg"]:
             raise HTTPException(status_code=400, detail="Fichier audio invalide. Seuls les formats WAV ou MP3 sont acceptés.")
 
-        # Lecture du fichier audio (non utilisé ici)
-        _ = await file.read()
-
         # Génération d'une prédiction aléatoire
         predicted_emotion = random.choice(EMOTIONS)
-        confidence = random.uniform(0.5, 1.0)  # Confiance aléatoire entre 50% et 100%
+        confidence = random.uniform(0.5, 1.0)
 
         return {
             "emotion": predicted_emotion,
@@ -33,6 +37,7 @@ async def predict(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur interne du serveur : {e}")
+
 
 # Exécution de l'application si appelée directement
 if __name__ == "__main__":

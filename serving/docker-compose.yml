@@ -1,26 +1,23 @@
 version: '3.8'
 
 networks:
-  prod_net:
-    driver: bridge
- 
-services: 
+  shared_net:
+    driver: bridge  # Réseau partagé entre les services
+
+volumes:
+  data_shared:  # Volume nommé partagé pour les fichiers de données
+
+services:
   serving-api:
-
     container_name: serving-api
-
     build:
       context: .
       dockerfile: Dockerfile
-
     volumes:
-      - ../data:/data
-      - ../artifacts:/artifacts
-
+      - data_shared:/data  # Volume partagé pour les fichiers de données
+      - ../artifacts:/artifacts  # Monte le dossier des artefacts
     ports:
-      - "8080:8080"
-
+      - "8080:8080"  # Expose l'API sur le port 8080
     networks:
-      - prod_net
-
-    restart: always
+      - shared_net  # Connecte au réseau partagé
+    restart: always  # Redémarre automatiquement le conteneur en cas de problème
