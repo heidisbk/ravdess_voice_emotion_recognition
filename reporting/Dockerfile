@@ -1,5 +1,6 @@
 FROM python:3.10-slim
 
+COPY api.py .
 COPY project.py .
 COPY requirements.txt .
 
