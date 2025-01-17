@@ -4,9 +4,6 @@ networks:
   shared_net:
     external: true
 
-volumes:
-  data_shared:
-
 services:
   webapp:
     container_name: webapp
@@ -14,7 +11,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - data_shared:/data
+      - ../data:/data
     ports:
       - "8081:8081"
     networks:

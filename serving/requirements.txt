@@ -4,3 +4,7 @@ python-multipart
 pandas
 scikit-learn
 librosa
+numpy
+joblib
+keras
+tensorflow

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.models import Sequential
@@ -8,7 +9,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import to_categorical
 
 
-file_path = "/content/advanced_processed_data.csv"  
+file_path = "data/preprocessed/advanced_processed_data.csv"  
 data = pd.read_csv(file_path)
 
 X = data.iloc[:, :-2] 
@@ -39,10 +40,9 @@ loss, accuracy = model.evaluate(X_test, y_test, verbose=0)
 print(f"Test Accuracy: {accuracy:.2f}")
 
 
-import pickle
-with open("model.pkl", "wb") as model_file:
+with open("/artifacts/model.pkl", "wb") as model_file:
     pickle.dump(model, model_file)
-with open("scaler.pkl", "wb") as scaler_file:
+with open("/artifacts/scaler.pkl", "wb") as scaler_file:
     pickle.dump(scaler, scaler_file)
 
 print("Modèle de réseau de neurones sauvegardé sous 'model.pkl'.")
