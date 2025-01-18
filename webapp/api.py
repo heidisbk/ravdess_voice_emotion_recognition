@@ -20,11 +20,42 @@ if uploaded_file is not None:
         response = requests.post("http://serving-api:8080/predict", files=files)
 
         if response.status_code == 200:
-            st.write("Prédiction :", response.json().get("emotion"))
-            st.write("Confiance :", response.json().get("confidence"))
-            st.write("Probabilités :", response.json().get("probabilities"))
+            pred_data = response.json()
+            st.write("Prédiction :", pred_data.get("emotion"))
+            st.write("Confiance :", pred_data.get("confidence"))
+            st.write("Probabilités :", pred_data.get("probabilities"))
+            # Stockage local de la prédiction
+            st.session_state["last_prediction"] = pred_data
+            st.session_state["last_audio"] = files  # pour pouvoir le réutiliser
         else:
             st.write("Erreur :", response.text)
 
         # traitement du fichier audio
         st.write("Traitement du fichier audio")
+
+    # Champ texte + bouton pour le feedback
+    true_label = st.text_input("Si vous connaissez la vraie émotion, entrez-la ici :")
+    if st.button("Envoyer le feedback"):
+        if "last_prediction" in st.session_state:
+            # On réutilise la prédiction + le fichier audio
+            pred_data = st.session_state["last_prediction"]
+            audio_data = st.session_state["last_audio"]  # le fichier initial
+
+            # Prépare la requête
+            data = {
+                "true_label": true_label,
+                "predicted_label": pred_data["emotion"]
+            }
+            files_feedback = {"file": audio_data["file"]}
+
+            feedback_response = requests.post(
+                "http://localhost:8080/feedback",
+                data=data,
+                files=files_feedback
+            )
+            if feedback_response.status_code == 200:
+                st.success("Feedback enregistré avec succès !")
+            else:
+                st.error(f"Erreur feedback: {feedback_response.text}")
+        else:
+            st.warning("Aucune prédiction disponible pour donner un feedback.")

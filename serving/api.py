@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 import random
 import numpy as np
 from tempfile import NamedTemporaryFile
@@ -115,7 +115,7 @@ def preprocess_and_predict(file_path: str) -> dict:
         if not file_exists:
             # Construire un header rudimentaire
             header = [f"feature_{i}" for i in range(len(features_list))]
-            header.append("predicted_emotion")
+            header.append("prediction")   # predicted_emotion
             header.append("confidence")
             writer.writerow(header)
         writer.writerow(row_to_save)
@@ -158,6 +158,57 @@ async def predict(file: UploadFile = File(...)):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur interne du serveur : {e}")
+
+@app.post("/feedback")
+async def feedback(
+    file: UploadFile = File(...),
+    target: str = Form(...),
+    prediction: str = Form(...)
+):
+    """
+    1) Ré-extrait les features de l'audio.
+    2) Ajoute au CSV une ligne contenant:
+       - toutes les features
+       - la prédiction
+       - la vraie étiquette (feedback)
+    """
+    try:
+        # Vérifier le type
+        if file.content_type not in ["audio/wav", "audio/mpeg"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Fichier audio invalide. Seuls WAV ou MP3."
+            )
+
+        # Créer un fichier temporaire
+        temp_file_path = f"temp_{int(time.time())}_{file.filename}"
+        with open(temp_file_path, "wb") as temp_file:
+            temp_file.write(file.file.read())
+
+        # Extraire les features
+        features = extract_features_advanced(temp_file_path)
+        os.remove(temp_file_path)
+        features_list = features.tolist()
+
+        # Ajouter au CSV
+        file_exists = os.path.isfile(CSV_PATH)
+        with open(CSV_PATH, mode="a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            # Si le fichier n’existe pas encore, on écrit l’en-tête
+            if not file_exists:
+                nb_features = len(features_list)
+                header = [f"feature_{i}" for i in range(nb_features)]
+                header += ["prediction", "target"]
+                writer.writerow(header)
+
+            # Crée la ligne avec features + prediction + target
+            row_to_save = features_list + [prediction, target]
+            writer.writerow(row_to_save)
+
+        return {"status": "feedback enregistré avec succès"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Exécution de l'application si appelée directement
 if __name__ == "__main__":
