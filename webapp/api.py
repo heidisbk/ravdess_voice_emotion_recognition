@@ -21,7 +21,7 @@ if uploaded_file is not None:
 
         if response.status_code == 200:
             pred_data = response.json()
-            st.write("Prédiction :", pred_data.get("emotion"))
+            st.write("Prédiction :", pred_data.get("prediction"))
             st.write("Confiance :", pred_data.get("confidence"))
             st.write("Probabilités :", pred_data.get("probabilities"))
             # Stockage local de la prédiction
@@ -34,28 +34,25 @@ if uploaded_file is not None:
         st.write("Traitement du fichier audio")
 
     # Champ texte + bouton pour le feedback
-    true_label = st.text_input("Si vous connaissez la vraie émotion, entrez-la ici :")
+    EMOTION_OPTIONS = ["neutral", "calm", "happy", "sad", "angry", "fearful", "disgust", "surprised"]
+    true_label = st.selectbox("Sélectionnez l'émotion réelle :", EMOTION_OPTIONS)
     if st.button("Envoyer le feedback"):
         if "last_prediction" in st.session_state:
-            # On réutilise la prédiction + le fichier audio
             pred_data = st.session_state["last_prediction"]
-            audio_data = st.session_state["last_audio"]  # le fichier initial
-
-            # Prépare la requête
-            data = {
-                "true_label": true_label,
-                "predicted_label": pred_data["emotion"]
+            # On a pred_data["features"], pred_data["prediction"], ...
+            
+            json_payload = {
+                "features": pred_data["features"],
+                "prediction": pred_data["prediction"],
+                "target": true_label
             }
-            files_feedback = {"file": audio_data["file"]}
+            
+            feedback_url = "http://serving-api:8080/feedback"  # ou localhost si en local
+            response = requests.post(feedback_url, json=json_payload)
 
-            feedback_response = requests.post(
-                "http://localhost:8080/feedback",
-                data=data,
-                files=files_feedback
-            )
-            if feedback_response.status_code == 200:
+            if response.status_code == 200:
                 st.success("Feedback enregistré avec succès !")
             else:
-                st.error(f"Erreur feedback: {feedback_response.text}")
+                st.error(f"Erreur feedback: {response.text}")
         else:
             st.warning("Aucune prédiction disponible pour donner un feedback.")

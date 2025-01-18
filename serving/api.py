@@ -7,6 +7,8 @@ import pickle
 import os
 import csv
 import time
+from pydantic import BaseModel
+from typing import List
 
 import librosa
 
@@ -67,66 +69,6 @@ def extract_features_advanced(file_path):
     
     return combined_features
 
-def preprocess_and_predict(file_path: str) -> dict:
-    """
-    1) Extrait les features du fichier audio `file_path`.
-    2) Transforme avec le scaler.
-    3) Fait la prédiction avec le modèle Keras.
-    4) Retourne le label prédit, la confiance, etc.
-    """
-    # 1) Extraire les features
-    features = extract_features_advanced(file_path)  # shape (1265,)
-    
-    # 2) Mise en forme
-    features_reshaped = features.reshape(1, -1)  # (1, 1265)
-    
-    # 3) Scale
-    features_scaled = scaler.transform(features_reshaped)  # (1, 1265)
-    
-    # 4) Prédiction
-    probabilities = model.predict(features_scaled)[0]  # shape (8,)
-    predicted_class = np.argmax(probabilities)
-    predicted_emotion = EMOTION_MAP[predicted_class]
-    confidence = float(probabilities[predicted_class])  # un float pour la classe prédite
-    
-    # Convertir en liste "classique" pour JSON
-    probabilities_list = probabilities.tolist()
-    features_list = features.tolist()
-
-    # 5) Sauvegarde dans le CSV
-    # Ici, tu souhaites sauvegarder toutes les features + label prédit + proba associée
-    # => On ajoute dans "prod_data.csv" :
-    #    [f0, f1, f2, ..., fN, label_predit, proba_predite]
-    # Pour stocker TOUTES les probabilités, tu peux décider de les ajouter
-    # ou te limiter à la plus haute. Fais comme tu préfères.
-    
-    row_to_save = list(features_list)  # toutes les features
-    row_to_save.append(predicted_emotion)
-    row_to_save.append(confidence)
-    # Ou ajouter toutes les probabilités
-    # row_to_save.extend(probabilities_list)
-
-    # Ouvrir/fermer le CSV en mode 'a' (append)
-    csv_path = "/data/prod_data.csv"  # ton chemin dans le conteneur (monté en volume)
-    file_exists = os.path.isfile(csv_path)
-    with open(csv_path, mode='a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        # Optionnel : écriture d’un header si le fichier n’existe pas encore
-        if not file_exists:
-            # Construire un header rudimentaire
-            header = [f"feature_{i}" for i in range(len(features_list))]
-            header.append("prediction")   # predicted_emotion
-            header.append("confidence")
-            writer.writerow(header)
-        writer.writerow(row_to_save)
-
-    # 6) Retour
-    return {
-        "emotion": predicted_emotion,
-        "confidence": confidence,
-        "probabilities": probabilities_list,
-    }
-
 # Endpoint pour vérifier l'état de l'API
 @app.get("/")
 def health_check():
@@ -139,70 +81,73 @@ async def predict(file: UploadFile = File(...)):
         if file.content_type not in ["audio/wav", "audio/mpeg"]:
             raise HTTPException(
                 status_code=400, 
-                detail="Fichier audio invalide. Seuls les formats WAV ou MP3 sont acceptés."
+                detail="Fichier audio invalide. Seuls WAV ou MP3 sont acceptés."
             )
         
-        # Nom de fichier temporaire, par ex. ajout d'un timestamp
         temp_file_path = f"temp_{int(time.time())}_{file.filename}"
-        
         with open(temp_file_path, "wb") as temp_file:
             temp_file.write(file.file.read())
         
-        # Appel de la fonction de prédiction
-        results = preprocess_and_predict(temp_file_path)
-
-        # Nettoyage du fichier temporaire
+        features = extract_features_advanced(temp_file_path)
         os.remove(temp_file_path)
 
-        return results
+        # Mise en forme pour le modèle
+        features_reshaped = features.reshape(1, -1)
+        features_scaled = scaler.transform(features_reshaped)
+
+        # Prédiction
+        probabilities = model.predict(features_scaled)[0]
+        predicted_class = np.argmax(probabilities)
+        predicted_emotion = EMOTION_MAP[predicted_class]
+        confidence = float(probabilities[predicted_class])
+
+        # Conversion pour JSON
+        probabilities_list = probabilities.tolist()
+        features_list = features.tolist()
+
+        # On ne write plus rien dans prod_data.csv ici.
+        return {
+            "features": features_list,
+            "prediction": predicted_emotion,
+            "confidence": confidence,
+            "probabilities": probabilities_list
+        }
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur interne du serveur : {e}")
 
+
+class FeedbackRequest(BaseModel):
+    features: List[float]
+    prediction: str
+    target: str
+
 @app.post("/feedback")
-async def feedback(
-    file: UploadFile = File(...),
-    target: str = Form(...),
-    prediction: str = Form(...)
-):
+async def feedback(req: FeedbackRequest):
     """
-    1) Ré-extrait les features de l'audio.
-    2) Ajoute au CSV une ligne contenant:
-       - toutes les features
-       - la prédiction
-       - la vraie étiquette (feedback)
+    On reçoit:
+     - features (Liste de float)
+     - prediction (str)
+     - target (str)
+    Puis on écrit dans /data/prod_data.csv une ligne:
+       feature_0, feature_1, ..., feature_n, prediction, target
     """
     try:
-        # Vérifier le type
-        if file.content_type not in ["audio/wav", "audio/mpeg"]:
-            raise HTTPException(
-                status_code=400,
-                detail="Fichier audio invalide. Seuls WAV ou MP3."
-            )
+        features_list = req.features
+        prediction = req.prediction
+        target = req.target
 
-        # Créer un fichier temporaire
-        temp_file_path = f"temp_{int(time.time())}_{file.filename}"
-        with open(temp_file_path, "wb") as temp_file:
-            temp_file.write(file.file.read())
+        csv_path = "/data/prod_data.csv"
+        file_exists = os.path.isfile(csv_path)
 
-        # Extraire les features
-        features = extract_features_advanced(temp_file_path)
-        os.remove(temp_file_path)
-        features_list = features.tolist()
-
-        # Ajouter au CSV
-        file_exists = os.path.isfile(CSV_PATH)
-        with open(CSV_PATH, mode="a", newline="", encoding="utf-8") as f:
+        with open(csv_path, "a", newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            # Si le fichier n’existe pas encore, on écrit l’en-tête
             if not file_exists:
-                nb_features = len(features_list)
-                header = [f"feature_{i}" for i in range(nb_features)]
+                header = [f"feature_{i}" for i in range(len(features_list))]
                 header += ["prediction", "target"]
                 writer.writerow(header)
 
-            # Crée la ligne avec features + prediction + target
-            row_to_save = features_list + [prediction, target]
+            row_to_save = list(features_list) + [prediction, target]
             writer.writerow(row_to_save)
 
         return {"status": "feedback enregistré avec succès"}

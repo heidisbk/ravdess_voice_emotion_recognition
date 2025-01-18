@@ -10,4 +10,5 @@ services:
       - "8082:8082"
     volumes:
       - ../data:/data
+      - ./reports:/reports  # Volume pour sauvegarder le rapport localement
     restart: always
