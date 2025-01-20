@@ -7,8 +7,8 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8082:8082"
+      - "8083:8083"  # Serveur HTTP pour le fichier HTML
     volumes:
       - ../data:/data
-      - ./reports:/reports  # Volume pour sauvegarder le rapport localement
+      - ./reports:/reports
     restart: always
